@@ -1,0 +1,17 @@
+# Licence of files that cannot carry a licence header (CT-12).
+# Source files carry their own "SPDX-License-Identifier: Apache-2.0" header;
+# the CI check comes with TK-012. Copyright holder: see NOTICE.
+version = 1
+
+[[annotations]]
+path = [
+  "**/*.md",
+  "**/*.json",
+  ".gitignore",
+  ".gitattributes",
+  ".github/CODEOWNERS",
+  "NOTICE",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 AfriX Solution"
+SPDX-License-Identifier = "Apache-2.0"

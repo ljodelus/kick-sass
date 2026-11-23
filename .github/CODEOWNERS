@@ -1,0 +1,5 @@
+# External contributions need the owner's review (MEN-24, arc42 §7.8).
+# Owner: the project owner on GitHub.
+*                                   @ljodelus
+/.github/workflows/                 @ljodelus
+/contracts/reference-cases/REVIEWED @ljodelus

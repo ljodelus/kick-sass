@@ -1,0 +1,52 @@
+# Build outputs
+target/
+build/
+dist/
+out/
+*.class
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+coverage/
+.angular/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets: never committed (CT-18).
+# The root .env is versioned and holds no secret (Compose defaults only).
+# Expected secrets are declared, without values, in contracts/secrets.yaml.
+.env.local
+.env.*.local
+*.local.env
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+kubeconfig
+*.kubeconfig
+
+# Terraform: state and variable files hold secrets in clear text.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Local agent instructions
+CLAUDE.local.md
+
+# Claude Code local settings
+.claude/settings.local.json
