@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: kicksaas-property-snake-case, kicksaas-property-classification, kicksaas-no-card-data, kicksaas-amount-not-number, kicksaas-no-nullable, kicksaas-string-bounded, kicksaas-array-bounded, kicksaas-enum-upper-snake-case, kicksaas-schema-has-type, kicksaas-one-of-discriminator, kicksaas-local-refs-only, kicksaas-only-project-extensions, kicksaas-servers-relative
+openapi: 3.1.1
+info: { title: Rule test, version: 0.1.0, description: Faulty document., license: { name: Apache License 2.0, identifier: Apache-2.0 }, contact: { url: https://github.com/ljodelus/kick-sass } }
+servers: [{ url: https://api.example.com, description: API }]
+paths: {}
+components:
+  schemas:
+    Thing:
+      type: object
+      description: x
+      x-class-extra-annotation: "@Foo"
+      properties:
+        cardNumber: { type: string, maxLength: 19, x-kicksaas-classification: public }
+        card_number: { type: string, maxLength: 19, x-kicksaas-classification: secret }
+        amount: { type: [number, "null"], x-kicksaas-classification: public }
+        note: { type: string, nullable: true, maxLength: 5, x-kicksaas-classification: wrong }
+        label: { type: [string, "null"], x-kicksaas-classification: public }
+        email: { type: string, format: email, x-kicksaas-classification: public }
+        list: { type: [array, "null"], items: { type: string, maxLength: 5 }, x-kicksaas-classification: public }
+        status: { type: string, enum: [active], x-kicksaas-classification: public }
+        anything: { description: no type, x-kicksaas-classification: public }
+        choice: { oneOf: [{ type: string, maxLength: 5 }, { type: integer }], x-kicksaas-classification: public }
+        remote: { $ref: "https://example.org/x.json", x-kicksaas-classification: public }

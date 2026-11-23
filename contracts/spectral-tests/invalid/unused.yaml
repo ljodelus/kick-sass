@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: oas3-unused-component
+openapi: 3.1.1
+info: { title: Rule test, version: 0.1.0, description: Faulty document., license: { name: Apache License 2.0, identifier: Apache-2.0 }, contact: { url: https://github.com/ljodelus/kick-sass } }
+servers: [{ url: /, description: API }]
+tags: [{ name: crm, description: Contacts. }]
+paths: {}
+components:
+  schemas:
+    Orphan: { type: object, description: x, properties: {} }

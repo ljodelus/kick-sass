@@ -1,22 +1,55 @@
 # SPDX-License-Identifier: Apache-2.0
-# Project rules for contracts/openapi.yaml and contracts/events/*.yaml.
-# Run: npm ci --prefix contracts && npm run --prefix contracts lint
-# Rules that need contracts/modules.yaml or contracts/surfaces.yaml (tag of a declared module,
-# security consistent with the surface, closed webhook list) come as JavaScript functions in
-# contracts/spectral-functions/ once those files exist.
+# Project rules for contracts/openapi.yaml and the AsyncAPI documents of contracts/events/.
+# Run: npm ci --prefix contracts && npm run --prefix contracts lint   (scripts are disabled by contracts/.npmrc)
+# Rule tests: npm run --prefix contracts test:rules   (contracts/spectral-tests/)
+#
+# Checks that need contracts/modules.yaml or a JavaScript function come later:
+# TODO(TK-008): tag of every operation is a module declared in contracts/modules.yaml.
+# TODO(TK-014): security schemes consistent with contracts/surfaces.yaml beyond path prefixes;
+#   Organization-Id on organization operations; closed list of webhook types, never a security
+#   fact; message `type` const equal to the channel address; validation of surfaces.yaml and
+#   events/translators.yaml against their JSON schemas.
 extends:
   - spectral:oas
   - spectral:asyncapi
 
+overrides:
+  # Shared conventions: a library for the modules, unused until a module refers to them.
+  # Any other unused component is an error (oas3-unused-component stays active).
+  - files:
+      - "openapi.yaml#/components/parameters/OrganizationHeader"
+      - "openapi.yaml#/components/parameters/IdempotencyKey"
+      - "openapi.yaml#/components/parameters/IfMatch"
+      - "openapi.yaml#/components/parameters/Cursor"
+      - "openapi.yaml#/components/parameters/Limit"
+      - "openapi.yaml#/components/parameters/Query"
+      - "openapi.yaml#/components/headers/ETag"
+      - "openapi.yaml#/components/headers/Deprecation"
+      - "openapi.yaml#/components/headers/Sunset"
+      - "openapi.yaml#/components/headers/Link"
+      - "openapi.yaml#/components/headers/Location"
+      - "openapi.yaml#/components/responses/BadRequest"
+      - "openapi.yaml#/components/responses/Unauthorized"
+      - "openapi.yaml#/components/responses/Forbidden"
+      - "openapi.yaml#/components/responses/NotFound"
+      - "openapi.yaml#/components/responses/Conflict"
+      - "openapi.yaml#/components/responses/UnprocessableContent"
+      - "openapi.yaml#/components/responses/TooManyRequests"
+      - "openapi.yaml#/components/responses/ServiceUnavailable"
+      - "openapi.yaml#/components/schemas/Money"
+      - "openapi.yaml#/components/schemas/Instant"
+      - "openapi.yaml#/components/schemas/Duration"
+      - "openapi.yaml#/components/schemas/Period"
+    rules:
+      oas3-unused-component: off
+
 rules:
-  # Shared components are a library for the modules: most are unused until a module refers to them.
-  oas3-unused-component: off
   # Events go through the outbox of the shared database, without a broker: AsyncAPI documents have no server.
   asyncapi-servers: off
   # No e-mail address is published in the contract: the contact is the repository URL.
   asyncapi-info-contact-properties: off
 
-  # --- Naming
+  # ---------------------------------------------------------------- Naming
   kicksaas-operation-id-camel-case:
     description: operationId is camelCase; renaming it is a breaking change.
     formats: [oas3]
@@ -46,15 +79,14 @@ rules:
       function: pattern
       functionOptions: { match: "^[a-z][a-z0-9_]*$" }
   kicksaas-enum-upper-snake-case:
-    description: Enumeration values of schemas are UPPER_SNAKE_CASE.
-    formats: [oas3]
+    description: Enumeration values are UPPER_SNAKE_CASE, except the fields of a sort parameter (x-kicksaas-sort).
     severity: error
-    given: "$.components.schemas..enum[*]"
+    given: "$..[?(@ && @.enum && !@['x-kicksaas-sort'])].enum[*]"
     then:
       function: pattern
       functionOptions: { match: "^[A-Z][A-Z0-9_]*$" }
 
-  # --- Operations
+  # ---------------------------------------------------------------- Surfaces and security
   kicksaas-path-surface:
     description: Every path belongs to a surface of contracts/surfaces.yaml described by this contract.
     formats: [oas3]
@@ -64,6 +96,60 @@ rules:
       field: "@key"
       function: pattern
       functionOptions: { match: "^/v1/(app|portal|admin|public-api|public)/" }
+  kicksaas-servers-relative:
+    description: Servers are relative; the deployment decides the host.
+    formats: [oas3]
+    severity: error
+    given: "$.servers[*].url"
+    then:
+      function: pattern
+      functionOptions: { match: "^/" }
+  kicksaas-operation-security-explicit:
+    description: Every operation declares its security explicitly.
+    formats: [oas3]
+    severity: error
+    given: "$.paths[*][get,put,post,patch,delete]"
+    then:
+      field: security
+      function: defined
+  kicksaas-public-security-empty:
+    description: Operations of /v1/public/ have no authentication (security []).
+    formats: [oas3]
+    severity: error
+    given: "$.paths[?(@property.match(/^\\/v1\\/public\\//))][get,put,post,patch,delete]"
+    then:
+      field: security
+      function: length
+      functionOptions: { max: 0 }
+  kicksaas-security-empty-only-public:
+    description: Only operations of /v1/public/ may have no authentication.
+    formats: [oas3]
+    severity: error
+    given: "$.paths[?(!@property.match(/^\\/v1\\/public\\//))][get,put,post,patch,delete].security"
+    then:
+      function: length
+      functionOptions: { min: 1 }
+  kicksaas-security-surface-scheme:
+    description: Operations use only the security schemes of the contract, one per requirement.
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given: "$.paths[*][get,put,post,patch,delete]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          properties:
+            security:
+              type: array
+              items:
+                type: object
+                minProperties: 1
+                maxProperties: 1
+                propertyNames: { enum: [app, portal, admin, publicApiKey, publicApiClient] }
+
+  # ---------------------------------------------------------------- Operations
   kicksaas-operation-one-tag:
     description: Every operation has exactly one tag, the code name of its module.
     formats: [oas3]
@@ -94,58 +180,196 @@ rules:
         function: truthy
       - field: "503"
         function: truthy
-  kicksaas-post-idempotency-key:
-    description: A non-idempotent POST declares the Idempotency-Key header (mark naturally idempotent ones with x-kicksaas-idempotent).
+  kicksaas-operation-auth-errors:
+    description: Every authenticated operation documents 401 and 403.
     formats: [oas3]
     severity: error
     resolved: false
-    given: "$.paths[*].post[?(@['x-kicksaas-idempotent'] != true)]"
+    given: "$.paths[?(!@property.match(/^\\/v1\\/public\\//))][get,put,post,patch,delete].responses"
     then:
-      - field: parameters
-        function: schema
-        functionOptions:
-          schema:
-            type: array
-            contains:
-              type: object
-              required: ["$ref"]
-              properties: { "$ref": { const: "#/components/parameters/IdempotencyKey" } }
-      - field: responses
-        function: schema
-        functionOptions:
-          schema: { type: object, required: ["409", "422"] }
-  kicksaas-request-body-closed:
-    description: Request bodies are closed objects (additionalProperties false).
+      - field: "401"
+        function: truthy
+      - field: "403"
+        function: truthy
+  kicksaas-operation-not-found:
+    description: An operation on a path with a parameter documents 404.
     formats: [oas3]
     severity: error
-    given: "$.paths[*][*].requestBody.content[*].schema"
+    resolved: false
+    given: "$.paths[?(@property.match(/\\{/))][get,put,patch,delete].responses"
+    then:
+      field: "404"
+      function: truthy
+  kicksaas-error-responses-problem-json:
+    description: Error responses are served as application/problem+json, or refer to a shared error response.
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given:
+      - "$.paths[*][get,put,post,patch,delete].responses[?(@property.match(/^[45]/))]"
+      - "$.components.responses[*]"
     then:
       function: schema
       functionOptions:
         schema:
-          type: object
-          required: [additionalProperties]
-          properties: { additionalProperties: { const: false } }
-
-  # --- Errors
-  kicksaas-error-responses-problem-json:
-    description: Shared error responses are served as application/problem+json.
-    formats: [oas3]
-    severity: error
-    given: "$.components.responses[*].content"
-    then:
-      field: application/problem+json
-      function: truthy
+          anyOf:
+            - required: ["$ref"]
+            - required: [content]
+              properties:
+                content: { type: object, required: [application/problem+json] }
   kicksaas-retry-after:
-    description: 429 and 503 carry Retry-After.
+    description: The shared 429 and 503 responses carry Retry-After.
     formats: [oas3]
     severity: error
     given: "$.components.responses[TooManyRequests,ServiceUnavailable]"
     then:
       field: headers.Retry-After
       function: truthy
+  kicksaas-success-example:
+    description: Every successful response with content has an example.
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given: "$.paths[*][get,put,post,patch,delete].responses[?(@property.match(/^2/))].content[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          anyOf:
+            - required: [examples]
+            - required: [example]
+  kicksaas-post-idempotency-key:
+    description: A non-idempotent POST declares Idempotency-Key, the shared 409 and the shared 422 (mark a naturally idempotent POST with x-kicksaas-idempotent true).
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given: "$.paths[*][?(@property === 'post' && @['x-kicksaas-idempotent'] !== true)]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [parameters, responses]
+          properties:
+            parameters:
+              type: array
+              contains:
+                type: object
+                required: ["$ref"]
+                properties: { "$ref": { const: "#/components/parameters/IdempotencyKey" } }
+            responses:
+              type: object
+              required: ["409", "422"]
+              properties:
+                "409": { type: object, properties: { "$ref": { const: "#/components/responses/Conflict" } }, required: ["$ref"] }
+                "422": { type: object, properties: { "$ref": { const: "#/components/responses/UnprocessableContent" } }, required: ["$ref"] }
+  kicksaas-update-if-match:
+    description: PUT and PATCH are conditional (If-Match) and document the shared 409.
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given: "$.paths[*][put,patch]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [parameters, responses]
+          properties:
+            parameters:
+              type: array
+              contains:
+                type: object
+                required: ["$ref"]
+                properties: { "$ref": { const: "#/components/parameters/IfMatch" } }
+            responses:
+              type: object
+              required: ["409"]
+  kicksaas-list-pagination:
+    description: A GET that returns a page (schema named <Resource>Page) takes cursor and limit.
+    formats: [oas3]
+    severity: error
+    resolved: false
+    given: "$.paths[*].get"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          if:
+            type: object
+            required: [responses]
+            properties:
+              responses:
+                type: object
+                required: ["200"]
+                properties:
+                  "200":
+                    type: object
+                    required: [content]
+                    properties:
+                      content:
+                        type: object
+                        required: [application/json]
+                        properties:
+                          application/json:
+                            type: object
+                            required: [schema]
+                            properties:
+                              schema:
+                                type: object
+                                required: ["$ref"]
+                                properties: { "$ref": { type: string, pattern: "Page$" } }
+          then:
+            type: object
+            required: [parameters]
+            properties:
+              parameters:
+                type: array
+                allOf:
+                  - contains: { type: object, required: ["$ref"], properties: { "$ref": { const: "#/components/parameters/Cursor" } } }
+                  - contains: { type: object, required: ["$ref"], properties: { "$ref": { const: "#/components/parameters/Limit" } } }
+  kicksaas-request-body-closed:
+    description: Request bodies are closed objects (additionalProperties false), at every level.
+    formats: [oas3]
+    severity: error
+    given:
+      - "$.paths[*][*].requestBody.content[*].schema"
+      - "$.paths[*][*].requestBody.content[*].schema..properties[*]"
+      - "$.paths[*][*].requestBody.content[*].schema..items"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          if:
+            anyOf:
+              - required: [type]
+                properties: { type: { const: object } }
+              - required: [type]
+                properties: { type: { type: array, contains: { const: object } } }
+              - required: [properties]
+          then:
+            required: [additionalProperties]
+            properties: { additionalProperties: { const: false } }
 
-  # --- Data
+  # ---------------------------------------------------------------- Data
+  kicksaas-schema-has-type:
+    description: Every schema and property has a type, unless it is a reference, a composition or a constant.
+    severity: error
+    resolved: false
+    given:
+      - "$.components.schemas[*]"
+      - "$..properties[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          anyOf:
+            - required: [type]
+            - required: ["$ref"]
+            - required: [allOf]
+            - required: [oneOf]
+            - required: [anyOf]
+            - required: [const]
   kicksaas-property-classification:
     description: Every property carries its data classification.
     severity: error
@@ -157,6 +381,15 @@ rules:
       - field: x-kicksaas-classification
         function: enumeration
         functionOptions: { values: [public, internal, confidential, sensitive, secret] }
+  kicksaas-no-secret-in-response:
+    description: No property classified secret is ever returned.
+    formats: [oas3]
+    severity: error
+    given: "$.paths[*][*].responses[*].content[*].schema..properties[*]"
+    then:
+      field: x-kicksaas-classification
+      function: pattern
+      functionOptions: { notMatch: "^secret$" }
   kicksaas-no-card-data:
     description: No payment card member is ever described.
     severity: error
@@ -173,32 +406,110 @@ rules:
       function: schema
       functionOptions:
         schema:
-          not: { properties: { type: { enum: [number, integer] } }, required: [type] }
+          not:
+            required: [type]
+            properties:
+              type:
+                anyOf:
+                  - enum: [number, integer]
+                  - type: array
+                    contains: { enum: [number, integer] }
   kicksaas-no-nullable:
     description: OpenAPI 3.1 has no nullable; use a type list with "null".
     severity: error
-    given: "$..properties[*]"
+    given: "$..[?(@ && @.nullable !== undefined)]"
     then:
       field: nullable
-      function: falsy
+      function: undefined
   kicksaas-string-bounded:
-    description: Free strings are bounded (maxLength), unless an enum, a format, a pattern or a const bounds them.
-    formats: [oas3]
+    description: Strings are bounded (maxLength), unless an enum, a const, a pattern or a bounded format (uuid, date, date-time, duration) bounds them.
     severity: error
-    given: "$.components.schemas..properties[?(@.type == 'string' && !@.enum && !@.format && !@.pattern && !@.const)]"
+    given:
+      - "$..properties[*]"
+      - "$..items"
+      - "$..parameters[*].schema"
+      - "$.components.schemas[*]"
     then:
-      field: maxLength
-      function: truthy
+      function: schema
+      functionOptions:
+        schema:
+          if:
+            required: [type]
+            properties:
+              type:
+                anyOf:
+                  - const: string
+                  - type: array
+                    contains: { const: string }
+            not:
+              anyOf:
+                - required: [enum]
+                - required: [const]
+                - required: [pattern]
+                - required: [format]
+                  properties: { format: { enum: [uuid, date, date-time, duration] } }
+          then:
+            required: [maxLength]
   kicksaas-array-bounded:
     description: Arrays are bounded (maxItems).
+    severity: error
+    given:
+      - "$..properties[*]"
+      - "$..parameters[*].schema"
+      - "$.components.schemas[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          if:
+            required: [type]
+            properties:
+              type:
+                anyOf:
+                  - const: array
+                  - type: array
+                    contains: { const: array }
+          then:
+            required: [maxItems]
+  kicksaas-integer-input-bounded:
+    description: Integer inputs have a maximum.
     formats: [oas3]
     severity: error
-    given: "$.components.schemas..[?(@.type == 'array')]"
+    given:
+      - "$..parameters[*].schema"
+      - "$.paths[*][*].requestBody.content[*].schema..properties[*]"
     then:
-      field: maxItems
+      function: schema
+      functionOptions:
+        schema:
+          if:
+            required: [type]
+            properties:
+              type:
+                anyOf:
+                  - const: integer
+                  - type: array
+                    contains: { const: integer }
+          then:
+            required: [maximum]
+  kicksaas-one-of-discriminator:
+    description: A oneOf has a discriminator with a closed mapping.
+    severity: error
+    resolved: false
+    given: "$..[?(@ && @.oneOf)]"
+    then:
+      field: discriminator.mapping
+      function: truthy
+  kicksaas-license-identifier:
+    description: The contract declares its SPDX license identifier.
+    formats: [oas3_1]
+    severity: error
+    given: "$.info.license"
+    then:
+      field: identifier
       function: truthy
 
-  # --- References and extensions
+  # ---------------------------------------------------------------- References and extensions
   kicksaas-local-refs-only:
     description: References are local; no remote reference is ever followed.
     severity: error
@@ -207,16 +518,15 @@ rules:
     then:
       function: pattern
       functionOptions: { match: "^(#/|\\./)" }
-
-  kicksaas-no-generator-code-extensions:
-    description: No x-python-* or other generator extension that injects code.
+  kicksaas-only-project-extensions:
+    description: Only x-kicksaas-* extensions are allowed; generator extensions can inject code.
     severity: error
     resolved: false
-    given: "$..[?(@property.match(/^x-(python|java|typescript|ts|codegen)/))]"
+    given: "$..[?(@property.match(/^x-/) && !@property.match(/^x-kicksaas-/))]"
     then:
       function: undefined
 
-  # --- Events
+  # ---------------------------------------------------------------- Events
   kicksaas-event-channel-address:
     description: The channel address of an event is its versioned type (ContactCreated.v1).
     formats: [aas3]
@@ -225,3 +535,46 @@ rules:
     then:
       function: pattern
       functionOptions: { match: "^[A-Z][A-Za-z0-9]{2,80}\\.v[1-9][0-9]{0,2}$" }
+  kicksaas-event-envelope:
+    description: A message payload is the shared envelope with type and version fixed by const.
+    formats: [aas3]
+    severity: error
+    resolved: false
+    given: "$.channels[*].messages[*].payload"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [allOf]
+          properties:
+            allOf:
+              type: array
+              allOf:
+                - contains: { type: object, required: ["$ref"], properties: { "$ref": { const: "./envelope.json" } } }
+                - contains:
+                    type: object
+                    required: [properties]
+                    properties:
+                      properties:
+                        type: object
+                        required: [type, version, payload]
+                        properties:
+                          type: { type: object, required: [const], properties: { const: { type: string, pattern: "^[A-Z][A-Za-z0-9]{2,80}\\.v[1-9][0-9]{0,2}$" } } }
+                          version: { type: object, required: [const], properties: { const: { type: integer, minimum: 1 } } }
+  kicksaas-event-draft-07:
+    description: Event schemas use the Draft 07 dialect.
+    formats: [aas3]
+    severity: error
+    resolved: false
+    given: "$..[?(@property === '$defs' || @property === 'prefixItems' || @property === 'unevaluatedProperties' || @property === 'dependentSchemas')]"
+    then:
+      function: undefined
+  kicksaas-event-no-personal-data:
+    description: No personal data in an event payload.
+    formats: [aas3]
+    severity: error
+    resolved: false
+    given: "$.channels[*].messages[*].payload..[?(@property === 'x-kicksaas-personal')]"
+    then:
+      function: falsy

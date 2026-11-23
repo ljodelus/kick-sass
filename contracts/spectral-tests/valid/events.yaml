@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Conforming AsyncAPI document: every project rule must pass on it without any result.
+asyncapi: 3.1.0
+info:
+  title: Rule test events
+  version: 0.1.0
+  description: Conforming event for the rule tests.
+  license: { name: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0 }
+  contact: { name: KickSaaS, url: https://github.com/ljodelus/kick-sass }
+  tags:
+    - name: crm
+      description: Contacts.
+defaultContentType: application/json
+channels:
+  contactCreated:
+    address: ContactCreated.v1
+    description: Contact created.
+    messages:
+      ContactCreated.v1:
+        name: ContactCreated.v1
+        summary: A contact was created in an organization.
+        payload:
+          allOf:
+            - $ref: "./envelope.json"
+            - type: object
+              properties:
+                type: { const: ContactCreated.v1, x-kicksaas-classification: public }
+                version: { const: 1, x-kicksaas-classification: public }
+                payload:
+                  type: object
+                  x-kicksaas-classification: internal
+                  required: [contact_id]
+                  properties:
+                    contact_id: { type: string, format: uuid, x-kicksaas-classification: internal }
+        examples:
+          - payload:
+              id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e70
+              seq: 1042
+              type: ContactCreated.v1
+              version: 1
+              organization_id: 0192f0c1-0000-7000-8000-000000000001
+              aggregate_type: contact
+              aggregate_id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e6f
+              occurred_at: "2026-11-20T08:30:00Z"
+              correlation_id: 4bf92f3577b34da6a3ce929d0e0e4736
+              causation_id: null
+              depth: 0
+              payload: { contact_id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e6f }
+operations:
+  publishContactCreated:
+    action: send
+    description: Publish ContactCreated.v1.
+    channel: { $ref: "#/channels/contactCreated" }

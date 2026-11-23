@@ -4,9 +4,16 @@
   "description": "Tools that check the KickSaaS contract.",
   "license": "Apache-2.0",
   "scripts": {
-    "lint": "spectral lint openapi.yaml \"events/*.yaml\" --ruleset .spectral.yaml --fail-severity=warn --ignore-unknown-format"
+    "lint": "spectral lint openapi.yaml \"events/*.yaml\" \"!events/translators.yaml\" --ruleset .spectral.yaml --fail-severity=hint",
+    "test:rules": "node spectral-tests/run.mjs"
   },
   "devDependencies": {
     "@stoplight/spectral-cli": "6.17.0"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scarfSettings": {
+    "enabled": false
   }
 }

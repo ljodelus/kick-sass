@@ -16,11 +16,15 @@ info:
     - errors are RFC 9457 problem details (`application/problem+json`) with a stable `code`
       and a `correlation_id`;
 
-    - identifiers are UUIDs, instants are RFC 3339 timestamps in UTC (`Z`), calendar dates are
-      `YYYY-MM-DD`, durations are ISO 8601 durations;
+    - identifiers are UUIDs; instants are `Instant` (RFC 3339, UTC, suffix `Z`), calendar dates
+      `CalendarDate`, durations `Duration` (ISO 8601), date ranges `Period`;
 
-    - lists are cursor-paginated (`cursor`, `limit`), sorted with `sort` (a closed list of
-      fields, `-` prefix for descending order), filtered by named fields and searched with `q`;
+    - lists are cursor-paginated: parameters `cursor` and `limit`, and one explicit page schema
+      per resource, named `<Resource>Page`, with `items` (bounded array) and `next_cursor`
+      (string, `null` on the last page);
+
+    - lists are sorted with `sort` (a closed list of fields, `-` prefix for descending order),
+      filtered by parameters named after the fields, and searched with `q`;
 
     - amounts are `Money` objects (decimal string and ISO 4217 currency), never numbers;
 
@@ -43,7 +47,7 @@ info:
     url: https://github.com/ljodelus/kick-sass
 servers:
   - url: /
-    description: Same origin as the application; the identity provider is served on the same host under /realms.
+    description: The API that serves this document.
 security:
   - app: []
 tags:
@@ -93,26 +97,29 @@ tags:
     description: Consents and suppression lists.
 paths: {}
 components:
+  # The identity provider runs on its own host. auth.example.com is a placeholder: each backend
+  # replaces it with the host of its identity provider when it serves this document.
   securitySchemes:
     app:
       type: openIdConnect
       description: Users of the application (realm `workspace`, audience `kicksaas-app`).
-      openIdConnectUrl: /realms/workspace/.well-known/openid-configuration
+      openIdConnectUrl: https://auth.example.com/realms/workspace/.well-known/openid-configuration
     portal:
       type: openIdConnect
       description: Customers of an organization on the portal (realm `customers`, audience `kicksaas-portal`).
-      openIdConnectUrl: /realms/customers/.well-known/openid-configuration
+      openIdConnectUrl: https://auth.example.com/realms/customers/.well-known/openid-configuration
     admin:
       type: openIdConnect
       description: Operators of the instance on the console (realm `platform`, audience `kicksaas-admin`).
-      openIdConnectUrl: /realms/platform/.well-known/openid-configuration
+      openIdConnectUrl: https://auth.example.com/realms/platform/.well-known/openid-configuration
     publicApiKey:
       type: http
       scheme: bearer
       bearerFormat: ks_<environment>_<prefix>_<secret>
       description: >
-        API key of an organization or of a user, sent as a bearer token on the public API.
-        The organization comes from the key, never from a header.
+        API key of an organization or of a user, sent as a bearer token on the public API. The
+        backend tells it from a JWT by its `ks_` prefix. The organization comes from the key,
+        never from a header.
     publicApiClient:
       type: oauth2
       description: >
@@ -120,7 +127,7 @@ components:
         audience `kicksaas-api`). The organization comes from the account, never from a header.
       flows:
         clientCredentials:
-          tokenUrl: /realms/workspace/protocol/openid-connect/token
+          tokenUrl: https://auth.example.com/realms/workspace/protocol/openid-connect/token
           scopes: {}
 
   parameters:
@@ -175,6 +182,9 @@ components:
     RetryAfter:
       description: Number of seconds to wait before retrying.
       schema: { type: integer, minimum: 0, maximum: 86400 }
+    WwwAuthenticate:
+      description: Authentication challenge (RFC 6750); carries `insufficient_user_authentication` when a step-up authentication is required (RFC 9470).
+      schema: { type: string, maxLength: 1024 }
     ETag:
       description: Entity tag of the returned version, to send back in `If-Match`.
       schema: { type: string, maxLength: 128 }
@@ -184,6 +194,9 @@ components:
     Sunset:
       description: Date after which the operation may be removed, as an HTTP date (RFC 8594). Never earlier than the end of the notice period.
       schema: { type: string, maxLength: 64 }
+    Link:
+      description: Links of the response; a deprecated operation links its release note with `rel="deprecation"` (RFC 9745).
+      schema: { type: string, maxLength: 2048 }
     Location:
       description: URL of the created resource.
       schema: { type: string, format: uri-reference, maxLength: 2048 }
@@ -197,23 +210,25 @@ components:
           examples:
             malformed:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/bad-request
+                type: urn:kicksaas:problem:request-malformed
                 title: Malformed request
                 status: 400
                 code: REQUEST_MALFORMED
                 correlation_id: 4bf92f3577b34da6a3ce929d0e0e4736
-                errors: [{ pointer: /limit, code: INTEGER_EXPECTED }]
+                errors: [{ parameter: limit, code: INTEGER_EXPECTED }]
     Unauthorized:
       description: >
         Missing, invalid or expired credentials, a token of another surface, or a step-up
         authentication required (RFC 9470).
+      headers:
+        WWW-Authenticate: { $ref: "#/components/headers/WwwAuthenticate" }
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
           examples:
             unauthenticated:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/unauthorized
+                type: urn:kicksaas:problem:authentication-required
                 title: Authentication required
                 status: 401
                 code: AUTHENTICATION_REQUIRED
@@ -226,7 +241,7 @@ components:
           examples:
             forbidden:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/forbidden
+                type: urn:kicksaas:problem:permission-denied
                 title: Permission refused
                 status: 403
                 code: PERMISSION_DENIED
@@ -239,49 +254,46 @@ components:
           examples:
             notFound:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/not-found
+                type: urn:kicksaas:problem:resource-not-found
                 title: Resource not found
                 status: 404
                 code: RESOURCE_NOT_FOUND
                 correlation_id: 4bf92f3577b34da6a3ce929d0e0e4736
     Conflict:
-      description: Conflicting state, or stale version in `If-Match` (code `VERSION_CONFLICT`).
+      description: >
+        Conflict. Codes: `VERSION_CONFLICT` (stale `If-Match`), `IDEMPOTENCY_KEY_IN_USE` (a request
+        with the same `Idempotency-Key` is still being processed), and the state conflicts listed by
+        each operation.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
           examples:
             versionConflict:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/conflict
+                type: urn:kicksaas:problem:version-conflict
                 title: The resource was modified meanwhile
                 status: 409
                 code: VERSION_CONFLICT
                 correlation_id: 4bf92f3577b34da6a3ce929d0e0e4736
-    IdempotencyKeyInUse:
-      description: A request with the same `Idempotency-Key` is still being processed (code `IDEMPOTENCY_KEY_IN_USE`).
-      content:
-        application/problem+json:
-          schema: { $ref: "#/components/schemas/Problem" }
-          examples:
             keyInUse:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/idempotency-key-in-use
+                type: urn:kicksaas:problem:idempotency-key-in-use
                 title: Request already in progress
                 status: 409
                 code: IDEMPOTENCY_KEY_IN_USE
                 correlation_id: 4bf92f3577b34da6a3ce929d0e0e4736
     UnprocessableContent:
       description: >
-        The request is well formed but refused by a validation rule. Codes: the validation codes
-        of the operation, and `IDEMPOTENCY_KEY_REUSED` when the `Idempotency-Key` was already used
-        with a different body.
+        The request is well formed but refused by a validation rule. Codes: `VALIDATION_FAILED`
+        with the invalid members in `errors`, the validation codes listed by each operation, and
+        `IDEMPOTENCY_KEY_REUSED` when the `Idempotency-Key` was already used with a different body.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
           examples:
             validation:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/validation
+                type: urn:kicksaas:problem:validation-failed
                 title: Validation failed
                 status: 422
                 code: VALIDATION_FAILED
@@ -289,7 +301,7 @@ components:
                 errors: [{ pointer: /email, code: EMAIL_INVALID }]
             keyReused:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/idempotency-key-reused
+                type: urn:kicksaas:problem:idempotency-key-reused
                 title: Idempotency key reused with a different body
                 status: 422
                 code: IDEMPOTENCY_KEY_REUSED
@@ -304,7 +316,7 @@ components:
           examples:
             rateLimited:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/too-many-requests
+                type: urn:kicksaas:problem:rate-limited
                 title: Too many requests
                 status: 429
                 code: RATE_LIMITED
@@ -319,7 +331,7 @@ components:
           examples:
             unavailable:
               value:
-                type: https://kicksaas.afrixsolution.com/problems/service-unavailable
+                type: urn:kicksaas:problem:service-unavailable
                 title: Service temporarily unavailable
                 status: 503
                 code: SERVICE_UNAVAILABLE
@@ -337,9 +349,11 @@ components:
           type: string
           format: uri
           maxLength: 2048
-          description: URI identifying the problem type.
+          description: >
+            URI of the problem type, independent of the deployment: `urn:kicksaas:problem:` followed
+            by the `code` in lower case, words separated by hyphens.
           x-kicksaas-classification: public
-          examples: ["https://kicksaas.afrixsolution.com/problems/validation"]
+          examples: ["urn:kicksaas:problem:validation-failed"]
         title:
           type: string
           maxLength: 200
@@ -372,29 +386,40 @@ components:
           x-kicksaas-classification: internal
         correlation_id:
           type: string
-          pattern: "^[0-9a-f]{32}$"
+          pattern: "^(?!0{32})[0-9a-f]{32}$"
           description: >
-            Correlation identifier, always present: the W3C Trace Context trace-id of the request.
-            Shown to the user so that support can find the logs and traces.
+            Correlation identifier, always present: the W3C Trace Context trace-id of the request at
+            the origin. The API starts a new trace at its entry for callers it does not trust, so a
+            client never chooses this identifier. Shown to the user so that support can find the
+            logs and traces.
           x-kicksaas-classification: internal
           examples: ["4bf92f3577b34da6a3ce929d0e0e4736"]
         errors:
           type: array
           maxItems: 100
-          description: Invalid members of the request, for validation errors.
+          description: Invalid members or parameters of the request, for validation errors.
           x-kicksaas-classification: public
           items: { $ref: "#/components/schemas/ProblemFieldError" }
     ProblemFieldError:
       type: object
-      description: One invalid member of the request.
-      required: [pointer, code]
+      description: One invalid member of the request body (`pointer`) or one invalid parameter (`parameter`).
+      required: [code]
+      anyOf:
+        - required: [pointer]
+        - required: [parameter]
       properties:
         pointer:
           type: string
           maxLength: 200
-          description: JSON Pointer (RFC 6901) to the invalid member of the request body, or the name of the invalid parameter.
+          description: JSON Pointer (RFC 6901) to the invalid member of the request body.
           x-kicksaas-classification: public
           examples: ["/email"]
+        parameter:
+          type: string
+          maxLength: 100
+          description: Name of the invalid query, path or header parameter.
+          x-kicksaas-classification: public
+          examples: ["limit"]
         code:
           type: string
           pattern: "^[A-Z][A-Z0-9_]{2,63}$"
@@ -403,6 +428,7 @@ components:
           examples: ["EMAIL_INVALID"]
     Money:
       type: object
+      additionalProperties: false
       description: >
         Monetary amount with an explicit currency. Never a floating-point number. The scale never
         exceeds the precision of the currency; rounding happens only where the contract says so.
@@ -420,3 +446,32 @@ components:
           description: ISO 4217 currency code.
           x-kicksaas-classification: public
           examples: ["EUR", "XOF"]
+    Instant:
+      type: string
+      format: date-time
+      pattern: "Z$"
+      description: Instant in UTC (RFC 3339), always with the suffix `Z`.
+      examples: ["2026-11-20T08:30:00Z"]
+    CalendarDate:
+      type: string
+      format: date
+      description: Calendar date without time zone (`YYYY-MM-DD`); never an instant.
+      examples: ["2026-11-20"]
+    Duration:
+      type: string
+      format: duration
+      maxLength: 64
+      description: ISO 8601 duration.
+      examples: ["PT30M"]
+    Period:
+      type: object
+      additionalProperties: false
+      description: Range of calendar dates; `end` is included and never before `start`.
+      required: [start, end]
+      properties:
+        start:
+          $ref: "#/components/schemas/CalendarDate"
+          x-kicksaas-classification: internal
+        end:
+          $ref: "#/components/schemas/CalendarDate"
+          x-kicksaas-classification: internal
