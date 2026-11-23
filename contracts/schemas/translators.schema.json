@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "translators.schema.json",
+  "title": "Event translators",
+  "description": "Schema of contracts/events/translators.yaml: how an old event version is produced from the new one during a notice period. Envelope members other than payload, type and version are copied unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "translators"],
+  "properties": {
+    "version": { "type": "integer", "const": 1, "description": "Version of this file format." },
+    "translators": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/definitions/translator" }
+    }
+  },
+  "definitions": {
+    "eventType": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]{2,80}\\.v[1-9][0-9]{0,2}$" },
+    "pointer": { "type": "string", "pattern": "^/payload(/[a-z0-9_]+)*$", "maxLength": 200 },
+    "translator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "until", "fields"],
+      "properties": {
+        "from": { "$ref": "#/definitions/eventType", "description": "New version, written to the outbox." },
+        "to": { "$ref": "#/definitions/eventType", "description": "Old version, produced during the notice period." },
+        "until": { "type": "string", "format": "date", "description": "Last day of the notice period." },
+        "fields": {
+          "type": "object",
+          "description": "Members of the old payload, each taken from a member of the new payload or set to a constant.",
+          "maxProperties": 200,
+          "propertyNames": { "$ref": "#/definitions/pointer" },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from"],
+                "properties": { "from": { "$ref": "#/definitions/pointer" } }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value"],
+                "properties": { "value": { "type": ["string", "integer", "boolean", "null"] } }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

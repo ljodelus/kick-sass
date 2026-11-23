@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: Apache-2.0
+# API surfaces: one group of routes, one token issuer and one audience each.
+# Both backends load this file and refuse any token of another issuer or audience (401).
+# Validated by contracts/schemas/surfaces.schema.json.
+version: 1
+surfaces:
+  - id: app
+    description: Application of the organizations' users.
+    prefix: /v1/app/
+    authentication: oidc
+    issuer_realm: workspace
+    audience: kicksaas-app
+    organization_header: required
+    clients: [web-app]
+    contract: openapi
+    versioning: v1-compatible
+  - id: portal
+    description: Customer portal of an organization.
+    prefix: /v1/portal/
+    authentication: oidc
+    issuer_realm: customers
+    audience: kicksaas-portal
+    organization_header: required
+    clients: [web-portal]
+    contract: openapi
+    versioning: v1-compatible
+  - id: admin
+    description: Console of the instance operators.
+    prefix: /v1/admin/
+    authentication: oidc
+    issuer_realm: platform
+    audience: kicksaas-admin
+    organization_header: forbidden
+    clients: [web-app]
+    contract: openapi
+    versioning: v1-compatible
+  - id: public-api
+    description: Public API for integrators, with API keys or service accounts; the organization comes from the credential.
+    prefix: /v1/public-api/
+    authentication: api-key-or-client-credentials
+    issuer_realm: workspace
+    audience: kicksaas-api
+    organization_header: forbidden
+    clients: [integrators]
+    contract: openapi
+    versioning: v1-compatible-with-notice
+  - id: public
+    description: Public pages and forms, protected by an ALTCHA challenge and rate limiting.
+    prefix: /v1/public/
+    authentication: none
+    organization_header: forbidden
+    clients: [web-components]
+    contract: openapi
+    versioning: v1-compatible
+  - id: scim
+    description: User provisioning by an enterprise identity provider.
+    prefix: /scim/v2/
+    authentication: scim-token
+    organization_header: forbidden
+    clients: [identity-providers]
+    contract: rfc7644
+    versioning: scim-2.0
+  - id: hooks
+    description: Incoming callbacks of providers, checked with each provider's signature.
+    prefix: /hooks/
+    authentication: provider-signature
+    organization_header: forbidden
+    clients: [providers]
+    contract: provider-format
+    versioning: per-provider-adapter
+  - id: realtime
+    description: WebSocket channel, opened with a single-use ticket from POST /v1/app/realtime/tickets.
+    prefix: /ws
+    authentication: single-use-ticket
+    organization_header: forbidden
+    clients: [web-app, web-portal]
+    contract: asyncapi
+    versioning: per-event-type
+  - id: docs
+    description: Swagger UI and the contract itself; can be disabled in production.
+    prefix: /docs
+    authentication: none
+    organization_header: forbidden
+    clients: [developers]
+    contract: openapi
+    versioning: none

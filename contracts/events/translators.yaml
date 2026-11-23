@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Translators of event versions. During a notice period the producer writes only the new
+# version to the outbox; each translator below produces the old version for the subscribers
+# and webhooks that have not moved yet. Validated by contracts/schemas/translators.schema.json.
+#
+# Example entry:
+#   - from: InvoiceIssued.v2          # written to the outbox by the producer
+#     to: InvoiceIssued.v1            # produced for subscribers not yet migrated
+#     until: "2027-06-30"             # last day of the notice period
+#     fields:                         # target member (JSON Pointer) <- source member or constant
+#       /payload/invoice_id: { from: /payload/invoice_id }
+#       /payload/total: { from: /payload/total/amount }
+#       /payload/channel: { value: EMAIL }
+version: 1
+translators: []

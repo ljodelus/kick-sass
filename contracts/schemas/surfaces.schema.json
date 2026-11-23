@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "surfaces.schema.json",
+  "title": "API surfaces",
+  "description": "Schema of contracts/surfaces.yaml: the groups of routes, with the token issuer and audience each one accepts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "surfaces"],
+  "properties": {
+    "version": { "type": "integer", "const": 1, "description": "Version of this file format." },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/surface" }
+    }
+  },
+  "definitions": {
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "prefix", "authentication", "organization_header", "clients", "contract", "versioning"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$", "description": "Stable identifier of the surface." },
+        "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "prefix": { "type": "string", "pattern": "^/[a-z0-9/-]*$", "maxLength": 50, "description": "Path prefix of the routes of the surface." },
+        "authentication": {
+          "type": "string",
+          "enum": ["oidc", "api-key-or-client-credentials", "none", "scim-token", "provider-signature", "single-use-ticket"],
+          "description": "How the caller is authenticated."
+        },
+        "issuer_realm": { "type": "string", "enum": ["workspace", "customers", "platform"], "description": "Keycloak realm whose tokens are accepted." },
+        "audience": { "type": "string", "pattern": "^kicksaas-[a-z]+$", "description": "Audience required in the access token." },
+        "organization_header": {
+          "type": "string",
+          "enum": ["required", "forbidden"],
+          "description": "Whether organization operations carry the Organization-Id header."
+        },
+        "clients": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" }
+        },
+        "contract": { "type": "string", "enum": ["openapi", "asyncapi", "rfc7644", "provider-format"], "description": "Where the routes are described." },
+        "versioning": {
+          "type": "string",
+          "enum": ["v1-compatible", "v1-compatible-with-notice", "scim-2.0", "per-provider-adapter", "per-event-type", "none"],
+          "description": "Versioning rule of the surface (contracts/COMPATIBILITY.md)."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "authentication": { "const": "oidc" } } },
+          "then": { "required": ["issuer_realm", "audience"] }
+        },
+        {
+          "if": { "properties": { "authentication": { "const": "api-key-or-client-credentials" } } },
+          "then": { "required": ["issuer_realm", "audience"] }
+        }
+      ]
+    }
+  }
+}
