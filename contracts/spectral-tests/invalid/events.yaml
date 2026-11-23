@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: kicksaas-event-channel-address, kicksaas-event-envelope, kicksaas-event-draft-07, kicksaas-event-no-personal-data
+asyncapi: 3.1.0
+info: { title: Rule test events, version: 0.1.0, description: Faulty events., contact: { name: KickSaaS, url: https://github.com/ljodelus/kick-sass }, license: { name: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0 }, tags: [{ name: crm, description: x }] }
+channels:
+  contactCreated:
+    address: contact-created
+    description: x
+    messages:
+      ContactCreated:
+        name: ContactCreated
+        summary: x
+        payload:
+          type: object
+          $defs: { x: { type: string } }
+          properties:
+            email: { type: string, x-kicksaas-personal: true, x-kicksaas-classification: confidential }
+operations: {}

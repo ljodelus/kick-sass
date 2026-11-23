@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Translators of event versions. During a notice period the producer writes only the new
+# version to the outbox; each translator below produces the old version for the subscribers
+# and webhooks that have not moved yet.
+# Schema: contracts/schemas/translators.schema.json. TODO(TK-014): checked in CI.
+#
+# Rules:
+# - `to` is the same type as `from`, with a lower version;
+# - the old payload is closed: it holds only the members listed in `fields`;
+#   envelope members other than type, version and payload are copied unchanged;
+# - a translation that a field mapping cannot express (arrays, computations) is written as code
+#   in the outbox translator of the backends and declared here with `fields` listing its output.
+#
+# Example entry:
+#   - from: InvoiceIssued.v2          # written to the outbox by the producer
+#     to: InvoiceIssued.v1            # produced for subscribers not yet migrated
+#     until: "2027-06-30"             # last day of the notice period
+#     fields:                         # member of the old payload <- member of the new payload, or constant
+#       /payload/invoice_id: { from: /payload/invoice_id }
+#       /payload/customer_id: { from: /payload/billed_party/customer_id }
+#       /payload/channel: { value: EMAIL }
+version: 1
+translators: []

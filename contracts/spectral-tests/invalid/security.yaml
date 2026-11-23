@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: kicksaas-public-security-empty, kicksaas-security-empty-only-public, kicksaas-security-surface-scheme, kicksaas-error-responses-problem-json
+openapi: 3.1.1
+info: { title: Rule test, version: 0.1.0, description: Faulty document., license: { name: Apache License 2.0, identifier: Apache-2.0 }, contact: { url: https://github.com/ljodelus/kick-sass } }
+servers: [{ url: /, description: API }]
+tags: [{ name: crm, description: Contacts. }]
+paths:
+  /v1/public/forms:
+    get:
+      tags: [crm]
+      operationId: getForm
+      summary: Form
+      description: x
+      security: [{ app: [] }]
+      responses:
+        "204": { description: ok }
+        "400": { description: x, content: { application/json: { schema: { type: object, properties: {} } } } }
+        "429": { description: x }
+        "503": { description: x }
+  /v1/app/things:
+    get:
+      tags: [crm]
+      operationId: getThings
+      summary: Things
+      description: x
+      security: []
+      responses:
+        "204": { description: ok }
+  /v1/admin/things:
+    get:
+      tags: [crm]
+      operationId: getAdminThings
+      summary: Things
+      description: x
+      security: [{ other: [] }]
+      responses:
+        "204": { description: ok }
+components:
+  securitySchemes:
+    app: { type: openIdConnect, openIdConnectUrl: https://auth.example.com/x }
+    other: { type: openIdConnect, openIdConnectUrl: https://auth.example.com/y }

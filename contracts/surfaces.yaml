@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: Apache-2.0
+# API surfaces: one group of routes, one token issuer and one audience each.
+# Both backends load this file and refuse a token of another issuer or audience (401), with one
+# exception: on the app surface, an operator of the console acting through a bounded
+# impersonation token (see `impersonation`).
+# A route belongs to the surface whose prefix it starts with (`match: prefix`, the prefix ends
+# with "/") or whose path it equals (`match: exact`).
+# Schema: contracts/schemas/surfaces.schema.json. TODO(TK-014): checked in CI.
+version: 1
+surfaces:
+  - id: app
+    description: Application of the organizations' users.
+    match: prefix
+    paths: [/v1/app/]
+    authentication: oidc
+    issuer_realm: workspace
+    audience: kicksaas-app
+    security_schemes: [app]
+    organization_header: required
+    # TODO(TK-099): bounded impersonation: a platform token with an impersonation grant is accepted here.
+    impersonation: platform-with-grant
+    clients: [web-app]
+    contract: openapi
+    versioning: v1-compatible
+  - id: portal
+    description: Customer portal of an organization.
+    match: prefix
+    paths: [/v1/portal/]
+    authentication: oidc
+    issuer_realm: customers
+    audience: kicksaas-portal
+    security_schemes: [portal]
+    organization_header: required
+    clients: [web-portal]
+    contract: openapi
+    versioning: v1-compatible
+  - id: admin
+    description: Console of the instance operators.
+    match: prefix
+    paths: [/v1/admin/]
+    authentication: oidc
+    issuer_realm: platform
+    audience: kicksaas-admin
+    security_schemes: [admin]
+    organization_header: forbidden
+    clients: [web-app]
+    contract: openapi
+    versioning: v1-compatible
+  - id: public-api
+    description: Public API for integrators, with API keys or service accounts; the organization comes from the credential.
+    match: prefix
+    paths: [/v1/public-api/]
+    authentication: api-key-or-client-credentials
+    issuer_realm: workspace
+    audience: kicksaas-api
+    security_schemes: [publicApiKey, publicApiClient]
+    organization_header: forbidden
+    clients: [integrators]
+    contract: openapi
+    versioning: v1-compatible-with-notice
+  - id: public
+    description: Public pages and forms, protected by an ALTCHA challenge and rate limiting.
+    match: prefix
+    paths: [/v1/public/]
+    authentication: none
+    security_schemes: []
+    organization_header: forbidden
+    clients: [web-components]
+    contract: openapi
+    versioning: v1-compatible
+  - id: scim
+    description: User provisioning by an enterprise identity provider.
+    match: prefix
+    paths: [/scim/v2/]
+    authentication: scim-token
+    organization_header: forbidden
+    clients: [identity-providers]
+    contract: rfc7644
+    versioning: scim-2.0
+  - id: hooks
+    description: Incoming callbacks of providers, checked with each provider's signature.
+    match: prefix
+    paths: [/hooks/]
+    authentication: provider-signature
+    organization_header: forbidden
+    clients: [providers]
+    contract: provider-format
+    versioning: per-provider-adapter
+  - id: realtime
+    description: WebSocket channel, opened with a single-use ticket from POST /v1/app/realtime/tickets.
+    match: exact
+    paths: [/ws]
+    authentication: single-use-ticket
+    organization_header: forbidden
+    clients: [web-app, web-portal]
+    contract: asyncapi
+    versioning: per-event-type
+  - id: docs
+    description: Swagger UI and the contract itself; can be disabled in production.
+    match: exact
+    paths: [/docs, /openapi.yaml]
+    authentication: none
+    security_schemes: []
+    organization_header: forbidden
+    clients: [developers]
+    contract: openapi
+    versioning: none
+  - id: internal
+    description: Health, metrics and internal endpoints, on the internal port only; never routed by the edge proxy.
+    match: exact
+    paths: [/health/live, /health/ready, /metrics, /internal/domains/ask]
+    authentication: none
+    internal_port: true
+    organization_header: forbidden
+    clients: [kubernetes, prometheus, edge-proxy]
+    contract: none
+    versioning: none

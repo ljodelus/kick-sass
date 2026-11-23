@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: kicksaas-request-body-closed, kicksaas-integer-input-bounded, kicksaas-no-secret-in-response
+openapi: 3.1.1
+info: { title: Rule test, version: 0.1.0, description: Faulty document., license: { name: Apache License 2.0, identifier: Apache-2.0 }, contact: { url: https://github.com/ljodelus/kick-sass } }
+servers: [{ url: /, description: API }]
+tags: [{ name: crm, description: Contacts. }]
+paths:
+  /v1/app/things:
+    put:
+      tags: [crm]
+      operationId: putThing
+      summary: Put
+      description: x
+      security: [{ app: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                nested: { type: object, properties: { count: { type: integer, x-kicksaas-classification: public } }, x-kicksaas-classification: public }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { type: object, properties: { token: { type: string, maxLength: 64, x-kicksaas-classification: secret } } }, example: { token: x } } } }
+components:
+  securitySchemes:
+    app: { type: openIdConnect, openIdConnectUrl: https://auth.example.com/x }

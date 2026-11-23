@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# expect: kicksaas-operation-id-camel-case, kicksaas-path-surface, kicksaas-operation-one-tag, kicksaas-operation-summary, kicksaas-operation-standard-errors, kicksaas-operation-auth-errors, kicksaas-operation-security-explicit, kicksaas-parameter-snake-case, kicksaas-success-example
+openapi: 3.1.1
+info: { title: Rule test, version: 0.1.0, description: Faulty document., license: { name: Apache License 2.0, identifier: Apache-2.0 }, contact: { url: https://github.com/ljodelus/kick-sass } }
+servers: [{ url: /, description: API }]
+tags: [{ name: crm, description: Contacts. }]
+paths:
+  /v2/other/things:
+    get:
+      tags: [crm, demo]
+      operationId: List_Things
+      description: x
+      parameters:
+        - { name: pageSize, in: query, description: x, schema: { type: integer, maximum: 10 } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { type: object, properties: {} } } } }

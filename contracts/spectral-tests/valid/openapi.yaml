@@ -1,0 +1,217 @@
+# SPDX-License-Identifier: Apache-2.0
+# Conforming document: every project rule must pass on it without any result.
+openapi: 3.1.1
+info:
+  title: Rule test, conforming
+  version: 0.1.0
+  description: Conforming operations for the rule tests.
+  license: { name: Apache License 2.0, identifier: Apache-2.0 }
+  contact: { name: KickSaaS, url: https://github.com/ljodelus/kick-sass }
+servers:
+  - url: /
+    description: The API that serves this document.
+tags:
+  - name: crm
+    description: Contacts.
+  - name: demo
+    description: Public demonstration.
+paths:
+  /v1/app/contacts:
+    get:
+      tags: [crm]
+      operationId: listContacts
+      summary: List contacts
+      description: Cursor-paginated list of contacts.
+      security: [{ app: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationHeader"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: sort
+          in: query
+          description: Sort field, prefix - for descending order.
+          schema: { type: string, enum: [created_at, -created_at], default: -created_at, x-kicksaas-sort: true }
+      responses:
+        "200":
+          description: One page of contacts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactPage" }
+              examples:
+                firstPage:
+                  value: { items: [{ id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e6f, email: jane.doe@example.org, status: ACTIVE }], next_cursor: null }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [crm]
+      operationId: createContact
+      summary: Create a contact
+      description: Creates a contact in the organization.
+      security: [{ app: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationHeader"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactCreate" }
+      responses:
+        "201":
+          description: The contact was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+              examples:
+                created:
+                  value: { id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e6f, email: jane.doe@example.org, status: ACTIVE }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableContent" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /v1/app/contacts/{contact_id}:
+    patch:
+      tags: [crm]
+      operationId: updateContact
+      summary: Update a contact
+      description: Updates the email of a contact.
+      security: [{ app: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationHeader"
+        - $ref: "#/components/parameters/IfMatch"
+        - name: contact_id
+          in: path
+          required: true
+          description: Identifier of the contact.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactCreate" }
+      responses:
+        "200":
+          description: The updated contact.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+              examples:
+                updated:
+                  value: { id: 0192f0c1-7c8e-7d3a-9b1e-3f2a1c4d5e6f, email: jane.doe@example.org, status: ACTIVE }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableContent" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /v1/public/demo/signups:
+    post:
+      tags: [demo]
+      operationId: signUpForDemo
+      summary: Sign up for the demonstration
+      description: Public form, protected by an ALTCHA challenge.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, altcha]
+              properties:
+                email: { type: string, format: email, maxLength: 254, x-kicksaas-classification: confidential, x-kicksaas-personal: true }
+                altcha: { type: string, maxLength: 4096, x-kicksaas-classification: internal }
+      responses:
+        "202": { description: The sign-up was accepted. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableContent" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+components:
+  securitySchemes:
+    app:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.com/realms/workspace/.well-known/openid-configuration
+  parameters:
+    OrganizationHeader:
+      name: Organization-Id
+      in: header
+      required: true
+      description: Active organization.
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Idempotency key.
+      schema: { type: string, format: uuid }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Entity tag.
+      schema: { type: string, maxLength: 128 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Cursor.
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      description: Page size.
+      schema: { type: integer, minimum: 1, maximum: 100 }
+  responses:
+    BadRequest: { description: Malformed., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Unauthorized: { description: Unauthenticated., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Forbidden: { description: Forbidden., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    NotFound: { description: Not found., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Conflict: { description: Conflict., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    UnprocessableContent: { description: Refused., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    TooManyRequests: { description: Rate limited., headers: { Retry-After: { description: Seconds to wait., schema: { type: integer, minimum: 0, maximum: 86400 } } }, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    ServiceUnavailable: { description: Unavailable., headers: { Retry-After: { description: Seconds to wait., schema: { type: integer, minimum: 0, maximum: 86400 } } }, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+  schemas:
+    Problem:
+      type: object
+      description: Problem details.
+      required: [code]
+      properties:
+        code: { type: string, pattern: "^[A-Z][A-Z0-9_]{2,63}$", x-kicksaas-classification: public }
+    ContactStatus:
+      type: string
+      description: Status of a contact.
+      enum: [ACTIVE, ARCHIVED]
+    Contact:
+      type: object
+      description: A contact.
+      required: [id, email, status]
+      properties:
+        id: { type: string, format: uuid, x-kicksaas-classification: internal }
+        email: { type: string, format: email, maxLength: 254, x-kicksaas-classification: confidential, x-kicksaas-personal: true }
+        status: { $ref: "#/components/schemas/ContactStatus", x-kicksaas-classification: internal }
+    ContactCreate:
+      type: object
+      additionalProperties: false
+      description: Data of a new contact.
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254, x-kicksaas-classification: confidential, x-kicksaas-personal: true }
+    ContactPage:
+      type: object
+      description: One page of contacts.
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/Contact" }, x-kicksaas-classification: internal }
+        next_cursor: { type: [string, "null"], maxLength: 512, x-kicksaas-classification: internal }

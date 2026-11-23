@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "surfaces.schema.json",
+  "title": "API surfaces",
+  "description": "Schema of contracts/surfaces.yaml: the groups of routes, with the token issuer and audience each one accepts. The uniqueness of ids and paths across surfaces is checked in CI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "surfaces"],
+  "properties": {
+    "version": { "type": "integer", "const": 1, "description": "Version of this file format." },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/surface" }
+    }
+  },
+  "definitions": {
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "match", "paths", "authentication", "organization_header", "clients", "contract", "versioning"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$", "description": "Stable identifier of the surface." },
+        "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "match": { "type": "string", "enum": ["prefix", "exact"], "description": "prefix: routes starting with a path (which ends with /); exact: routes equal to a path." },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^/[a-z0-9/._-]*$", "maxLength": 100 }
+        },
+        "authentication": {
+          "type": "string",
+          "enum": ["oidc", "api-key-or-client-credentials", "none", "scim-token", "provider-signature", "single-use-ticket"],
+          "description": "How the caller is authenticated."
+        },
+        "issuer_realm": { "type": "string", "enum": ["workspace", "customers", "platform"], "description": "Keycloak realm whose tokens are accepted." },
+        "audience": { "type": "string", "pattern": "^kicksaas-[a-z]+$", "description": "Audience required in the access token." },
+        "security_schemes": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["app", "portal", "admin", "publicApiKey", "publicApiClient"] },
+          "description": "Security schemes of contracts/openapi.yaml that the operations of the surface use; empty for a public surface."
+        },
+        "organization_header": {
+          "type": "string",
+          "enum": ["required", "forbidden"],
+          "description": "Whether organization operations carry the Organization-Id header."
+        },
+        "impersonation": { "type": "string", "enum": ["platform-with-grant"], "description": "Accepted exception to the issuer of the surface." },
+        "internal_port": { "type": "boolean", "description": "Served on the internal port only." },
+        "clients": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" }
+        },
+        "contract": { "type": "string", "enum": ["openapi", "asyncapi", "rfc7644", "provider-format", "none"], "description": "Where the routes are described." },
+        "versioning": {
+          "type": "string",
+          "enum": ["v1-compatible", "v1-compatible-with-notice", "scim-2.0", "per-provider-adapter", "per-event-type", "none"],
+          "description": "Versioning rule of the surface (contracts/COMPATIBILITY.md)."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "authentication": { "enum": ["oidc", "api-key-or-client-credentials"] } } },
+          "then": { "required": ["issuer_realm", "audience", "security_schemes"] },
+          "else": { "not": { "anyOf": [{ "required": ["issuer_realm"] }, { "required": ["audience"] }] } }
+        },
+        {
+          "if": { "properties": { "match": { "const": "prefix" } } },
+          "then": { "properties": { "paths": { "items": { "pattern": "/$" } } } }
+        },
+        {
+          "if": { "properties": { "contract": { "const": "openapi" } } },
+          "then": { "required": ["security_schemes"] }
+        }
+      ]
+    }
+  }
+}
