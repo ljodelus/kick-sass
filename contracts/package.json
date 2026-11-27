@@ -11,7 +11,7 @@
     "@stoplight/spectral-cli": "6.17.0"
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24 <27"
   },
   "scarfSettings": {
     "enabled": false
